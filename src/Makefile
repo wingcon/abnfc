@@ -21,8 +21,10 @@ MODULES = \
 	abnfc_ast \
 	abnfc \
 	abnfc_gen \
-	abnfc_rfc4234\
-	rfc4234_core
+	abnfc_rfc4234 \
+	abnfc_rfc4234ext \
+	rfc4234_core \
+	rfc4234ext_core
 
 # include erl make
 include $(shell cat ../.depends-gmt-bom)/make/erl_make.mk
