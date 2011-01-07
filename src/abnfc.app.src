@@ -1,8 +1,14 @@
 %% -*- erlang -*-
 {application, abnfc,
  [{description,"ABNF parser generator"},
-  {vsn,"%VSN%"},
-  {modules,[%MODULES%]},
+  {vsn,"0.4.1"},
+  {modules,[abnfc_ast
+            , abnfc
+            , abnfc_gen
+            , abnfc_rfc4234
+            , abnfc_rfc4234ext
+            , rfc4234_core
+            , rfc4234ext_core]},
   {applications,[kernel,stdlib]},
   {registered,[]},
   {env,[]}
