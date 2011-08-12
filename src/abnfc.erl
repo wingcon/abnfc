@@ -167,7 +167,7 @@ write_file(Code, Opts) ->
                          proplists:get_value(mod, Opts))++".erl",
 
     maybe_write("abnfc: writing to ~p~n",[Name],Opts),
-    file:write_file(Name, Code),
+    ok = file:write_file(Name, Code),
     erl_tidy:file(Name,[{paper, 95},{backups,false}]),
     {ok,Name}.
 
