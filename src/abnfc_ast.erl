@@ -1,9 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @copyright 2009 Anders Nygren
-%%% @version  {@vsn} 
 %%% @author Anders Nygren <anders.nygren@gmail.com>
-%%% @doc 
-%%% @end 
+%%% @doc
+%%% @end
 %%%-------------------------------------------------------------------
 -module(abnfc_ast).
 
