@@ -16,7 +16,7 @@ __Authors:__ Anders Nygren ([`anders.nygren@gmail.com`](mailto:anders.nygren@gma
 ##Function Index##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#erlangcode-0">erlangcode/0</a></td><td>Scan erlang code.</td></tr><tr><td valign="top"><a href="#file-1">file/1</a></td><td>Compile an ABNF file.</td></tr><tr><td valign="top"><a href="#file-2">file/2</a></td><td>Compile an ABNF file.</td></tr><tr><td valign="top"><a href="#parse-1">parse/1</a></td><td>Parse a list or binary.</td></tr><tr><td valign="top"><a href="#parse-2">parse/2</a></td><td>Parse a list or binary.</td></tr></table>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#erlangcode-0">erlangcode/0</a></td><td><p>Scan erlang code.</p>.</td></tr><tr><td valign="top"><a href="#file-1">file/1</a></td><td><p>Compile an ABNF file.</p>.</td></tr><tr><td valign="top"><a href="#file-2">file/2</a></td><td><p>Compile an ABNF file.</p>.</td></tr><tr><td valign="top"><a href="#parse-1">parse/1</a></td><td><p>Parse a list or binary.</p>.</td></tr><tr><td valign="top"><a href="#parse-2">parse/2</a></td><td><p>Parse a list or binary.</p>.</td></tr></table>
 
 
 <a name="functions"></a>
@@ -36,7 +36,8 @@ __Authors:__ Anders Nygren ([`anders.nygren@gmail.com`](mailto:anders.nygren@gma
 
 
 
-Scan erlang code.<a name="file-1"></a>
+<p>Scan erlang code.</p>
+<a name="file-1"></a>
 
 ###file/1##
 
@@ -49,7 +50,8 @@ Scan erlang code.<a name="file-1"></a>
 
 
 
-Compile an ABNF file.<a name="file-2"></a>
+<p>Compile an ABNF file.</p>
+<a name="file-2"></a>
 
 ###file/2##
 
@@ -61,7 +63,8 @@ Compile an ABNF file.<a name="file-2"></a>
 
 
 
-Compile an ABNF file.<a name="parse-1"></a>
+<p>Compile an ABNF file.</p>
+<a name="parse-1"></a>
 
 ###parse/1##
 
@@ -73,7 +76,8 @@ Compile an ABNF file.<a name="parse-1"></a>
 
 
 
-Parse a list or binary.<a name="parse-2"></a>
+<p>Parse a list or binary.</p>
+<a name="parse-2"></a>
 
 ###parse/2##
 
@@ -85,4 +89,4 @@ Parse a list or binary.<a name="parse-2"></a>
 
 
 
-Parse a list or binary.
+<p>Parse a list or binary.</p>
