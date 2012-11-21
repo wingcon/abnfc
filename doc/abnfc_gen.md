@@ -6,9 +6,7 @@
 * [Function Details](#functions)
 
 
-<p>Code generation.</p>.
-
-
+Code generation.
 
 Copyright (c) 2009 Anders Nygren
 
@@ -27,8 +25,6 @@ __Authors:__ Anders Nygren ([`anders.nygren@gmail.com`](mailto:anders.nygren@gma
 <a name="generate-2"></a>
 
 ###generate/2##
-
-
 
 
 `generate(AST, Opts) -> any()`
