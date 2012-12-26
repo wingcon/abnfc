@@ -46,13 +46,11 @@ file(File, Opts) when is_list(Opts) ->
                         false -> ok
                     end,
                     {ok, Code} = abnfc_gen:generate(AST1, GenOpts),
-                    {ok, GenFile} = write_file(Code, GenOpts),
+                    {ok, GenFile} = write_file(Code, GenOpts ++ Opts),
                     compile_file(GenFile, COpts, Opts);
                 Error ->
                     Error
-            end;
-        Error ->
-            Error
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -75,11 +73,11 @@ parse(Bin, Opts) when is_binary(Bin) ->
 
 parse(String, Opts) when is_list(String) ->
     Parser = proplists:get_value(parser, parse_opts(Opts)),
-    case catch Parser:rulelist_dec(String) of
+    case catch Parser:decode(rulelist, String) of
         {ok, _Rulelist, []} =Result ->
             Result;
-        _Error ->
-            io:format("abnfc: failed~n",[])
+        Error ->
+            io:format("abnfc: failed ~p~n", [Error])
     end.
 
 %%--------------------------------------------------------------------
@@ -95,8 +93,6 @@ erlangcode() ->
 scan(Input) ->
     case erl_scan:tokens([], Input, 1) of
         {done, {ok, Toks, _EndLine}, Extra} ->
-            %%	    Code = toks_to_list(Toks),
-            %%	    {ok, Code, Extra};
             {ok,Abs} = erl_parse:parse_exprs(Toks),
             {ok, Abs, Extra};
         {more, _Cont} ->

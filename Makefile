@@ -1,10 +1,23 @@
 
 REBAR?=./rebar
 
-.PHONY: all clean deps compile xref doc test eunit eqc proper triq \
+.PHONY: all bootstrap clean deps compile xref doc test eunit eqc proper triq \
 	compile-for-eunit compile-for-eqc compile-for-proper compile-for-triq
 
 all: compile
+
+bootstrap:
+	@rm -rf ebin
+	@mkdir ebin
+	erlc -I include -o ebin src/abnfc.erl
+	erlc -I include -o ebin src/abnfc_gen.erl
+	erlc -I include -o ebin src/abnfc_ast.erl
+	erlc -I include -o ebin src/abnfc_rfc4234.erl
+	erlc -I include -o ebin src/rfc4234_core.erl
+	./bootstrap
+	./bootstrapext
+	$(MAKE) clean
+	$(MAKE) all
 
 deps:
 	$(REBAR) get-deps
