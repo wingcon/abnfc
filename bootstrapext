@@ -1,7 +1,0 @@
-#!/usr/bin/env escript
-
-main([]) ->
-    true = code:add_patha("ebin"),
-    AbnfcOpts = [noobj, {o, "src"}, {i, "include"}, {i, "src"}],
-    abnfc:file("src/rfc4234ext_core.abnf", AbnfcOpts),
-    abnfc:file("src/abnfc_rfc4234ext.abnf", AbnfcOpts).

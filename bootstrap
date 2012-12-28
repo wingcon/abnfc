@@ -2,6 +2,13 @@
 
 main([]) ->
     true = code:add_patha("ebin"),
-    AbnfcOpts = [noobj, {o, "src"}, {i, "include"}, {i, "src"}],
-    abnfc:file("src/rfc4234_core.abnf", AbnfcOpts),
-    abnfc:file("src/abnfc_rfc4234.abnf", AbnfcOpts).
+
+    AbnfcOpts1 = [noobj, {o, "src"}, {i, "include"}, {i, "src"}],
+    abnfc:file("src/rfc4234_core.abnf", AbnfcOpts1),
+    abnfc:file("src/abnfc_rfc4234.abnf", AbnfcOpts1),
+    abnfc:file("src/rfc4234ext_core.abnf", AbnfcOpts1),
+    abnfc:file("src/abnfc_rfc4234ext.abnf", AbnfcOpts1),
+
+    AbnfcOpts2 = [noobj, {o, "test/qc"}, {i, "include"}, {i, "test/qc"}],
+    abnfc:file("test/qc/rfc3629_list.abnf", AbnfcOpts2 ++ [list]),
+    abnfc:file("test/qc/rfc3629_binary.abnf", AbnfcOpts2 ++ [binary]).

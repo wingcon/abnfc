@@ -8,6 +8,20 @@
                        'BIT'/0,
                        'HEXDIG'/0]).
 
+-ifdef('QC').
+
+-import(abnfc,[erlangcode_generator/0]).
+-import(rfc4234_core, ['ALPHA_generator'/0,
+                       'DIGIT_generator'/0,
+                       'WSP_generator'/0,
+                       'CRLF_generator'/0,
+                       'VCHAR_generator'/0,
+                       'DQUOTE_generator'/0,
+                       'BIT_generator'/0,
+                       'HEXDIG_generator'/0]).
+
+-endif.
+
 -include("abnfc_ast.hrl").
 
 hex_to_int(Ds) ->

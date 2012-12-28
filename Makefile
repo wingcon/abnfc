@@ -15,7 +15,6 @@ bootstrap:
 	erlc -I include -o ebin src/abnfc_rfc4234.erl
 	erlc -I include -o ebin src/rfc4234_core.erl
 	./bootstrap
-	./bootstrapext
 	$(MAKE) clean
 	$(MAKE) all
 

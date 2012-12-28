@@ -1,13 +1,28 @@
 -import(abnfc,[erlangcode/0]).
 -import(rfc4234ext_core, ['ALPHA'/0,
-                       'DIGIT'/0,
-                       'WSP'/0,
-                       'CRLF'/0,
-                       'VCHAR'/0,
-                       'DQUOTE'/0,
-                       'SQUOTE'/0,
-                       'BIT'/0,
-                       'HEXDIG'/0]).
+                          'DIGIT'/0,
+                          'WSP'/0,
+                          'CRLF'/0,
+                          'VCHAR'/0,
+                          'DQUOTE'/0,
+                          'SQUOTE'/0,
+                          'BIT'/0,
+                          'HEXDIG'/0]).
+
+-ifdef('QC').
+
+-import(abnfc,[erlangcode_generator/0]).
+-import(rfc4234ext_core, ['ALPHA_generator'/0,
+                          'DIGIT_generator'/0,
+                          'WSP_generator'/0,
+                          'CRLF_generator'/0,
+                          'VCHAR_generator'/0,
+                          'DQUOTE_generator'/0,
+                          'SQUOTE_generator'/0,
+                          'BIT_generator'/0,
+                          'HEXDIG_generator'/0]).
+
+-endif.
 
 -include("abnfc_ast.hrl").
 
