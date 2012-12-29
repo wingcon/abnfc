@@ -7,88 +7,79 @@
 -module(abnfc).
 
 %% API
--export([file/1, file/2,
-         parse/1, parse/2]).
-
+-export([file/1, file/2, parse/1, parse/2]).
 -export([erlangcode/0]).
 
--compile(export_all).
+%%====================================================================
+%% Types
+%%====================================================================
+
+-type filename() :: file:filename().
+-type options() :: [verbose | {verbose,boolean()} | {parser,module()} | {prefix,atom()} | binary | list | {o,filename()} | {i,filename()} | {mod,module()} | noobj | {noobj,boolean()}].
+-type text() :: string() | binary().
+
 %%====================================================================
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec (File::string()) -> {ok, AST, Rest::binary()} | Error
 %% @doc Compile an ABNF file.
 %% @end
 %%--------------------------------------------------------------------
+-spec file(filename()) -> ok | {ok,module()} | error.
 file(File) ->
     file(File,[]).
 
 %%--------------------------------------------------------------------
-%% @spec (File::string(), Opts) -> {ok, AST, Rest::binary()} | Error
-%% Opts = [Option]
-%% Option = OutFile
-%% OutFile = string()
 %% @doc Compile an ABNF file.
 %% @end
 %%--------------------------------------------------------------------
+-spec file(filename(), options()) -> ok | {ok,module()} | {error,Rest::term()} | error.
 file(File, Opts) when is_list(Opts) ->
-    case read_file(File) of
-        {ok, Name, Text} ->
-            POpts = [],
-            GenOpts = gen_opts(Name, Opts),
-            COpts = compiler_opts(Opts),
-            case parse(Text, POpts) of
-                {ok, AST, _Rest} ->
-                    AST1 = abnfc_ast:ast_to_int_form(AST),
-                    case proplists:get_bool(verbose,Opts) of
-                        true -> io:format("~p~n",[AST1]);
-                        false -> ok
-                    end,
-                    {ok, Code} = abnfc_gen:generate(AST1, GenOpts),
-                    {ok, GenFile} = write_file(Code, GenOpts ++ Opts),
-                    compile_file(GenFile, COpts, Opts);
-                Error ->
-                    Error
-            end
+    {ok, Name, Text} = read_file(File),
+    POpts = [],
+    GenOpts = gen_opts(Name, Opts),
+    COpts = compiler_opts(Opts),
+    case parse(Text, POpts) of
+        {ok, AST, []} ->
+            AST1 = abnfc_ast:ast_to_int_form(AST),
+            case proplists:get_bool(verbose,Opts) of
+                true -> io:format("~p~n",[AST1]);
+                false -> ok
+            end,
+            {ok, Code} = abnfc_gen:generate(AST1, GenOpts),
+            {ok, GenFile} = write_file(Code, GenOpts ++ Opts),
+            compile_file(GenFile, COpts, Opts);
+        {ok, _AST, Rest} ->
+            {error, Rest}
     end.
 
 %%--------------------------------------------------------------------
-%% @spec (Text) -> {ok, AST, Rest::binary()} | fail
-%% Text = list() | binary()
 %% @doc Parse a list or binary.
 %% @end
 %%--------------------------------------------------------------------
-parse(Bin) ->
-    parse(Bin, []).
+-spec parse(text()) -> {ok, AST::term(), Rest::term()}.
+parse(Text) ->
+    parse(Text, []).
 
 %%--------------------------------------------------------------------
-%% @spec (Text, Opts) -> {ok, AST, Rest::list()} | fail
-%% Text = list() | binary()
 %% @doc Parse a list or binary.
 %% @end
 %%--------------------------------------------------------------------
+-spec parse(text(), options()) -> {ok, AST::term(), Rest::term()}.
 parse(Bin, Opts) when is_binary(Bin) ->
     parse(binary_to_list(Bin), Opts);
 
 parse(String, Opts) when is_list(String) ->
     Parser = proplists:get_value(parser, parse_opts(Opts)),
-    case catch Parser:decode(rulelist, String) of
-        {ok, _Rulelist, []} =Result ->
-            Result;
-        Error ->
-            io:format("abnfc: failed ~p~n", [Error])
-    end.
+    Parser:decode(rulelist, String).
 
 %%--------------------------------------------------------------------
-%% @spec () -> list()
 %% @doc Scan erlang code.
 %% @end
 %%--------------------------------------------------------------------
+-spec erlangcode() -> fun(('eof' | string()) -> {ok, Abs::term(), Extra::binary()}).
 erlangcode() ->
-    fun (T) ->
-            scan(T)
-    end.
+    fun (T) -> scan(T) end.
 
 scan(Input) ->
     case erl_scan:tokens([], Input, 1) of
@@ -98,30 +89,6 @@ scan(Input) ->
         {more, _Cont} ->
             throw(end_of_input)
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @spec (Tokens) -> list()
-%% @doc Convert tokens returned by erl_scan to a string again.
-%% @end
-%%--------------------------------------------------------------------
-toks_to_list(Tokens) ->
-    lists:foldl(fun({atom,L,Name},{Line, Acc}) ->
-                        {L,["'",Name,"'",sep(L,Line)|Acc]};
-                   ({string,L,Name},{Line, Acc}) ->
-                        {L,["\"",Name,"\"",sep(L,Line)|Acc]};
-                   ({_Type,L,Name},{Line, Acc}) ->
-                        {L,[Name,sep(L,Line)|Acc]};
-                   ({dot,_L},{_Line,Acc}) ->
-                        lists:concat(lists:reverse(Acc));
-                   ({Reserved, L},{Line,Acc}) ->
-                        {L,[Reserved,sep(L,Line)|Acc]}
-                end, {1,[]}, Tokens).
-
-sep(L,L) ->
-    " ";
-sep(_,_) ->
-    "\n".
 
 %%====================================================================
 %% Internal functions
@@ -145,12 +112,13 @@ parse_opts(Opts) ->
 
 gen_opts(Name, Opts) ->
     Mod = proplists:get_value(mod, Opts, Name),
+    Prefix = proplists:get_value(prefix, Opts, ''),
     Type = case proplists:get_bool(binary, Opts) of
                true -> binary;
                false -> list
            end,
     Verbose = proplists:get_bool(verbose,Opts),
-    [{mod,Mod},{verbose,Verbose},Type].
+    [{mod,Mod},{prefix,Prefix},{verbose,Verbose},Type].
 
 compiler_opts(Opts) ->
     OutDir = proplists:get_value(o, Opts, "./"),
@@ -163,7 +131,7 @@ write_file(Code, Opts) ->
 
     maybe_write("abnfc: writing to ~p~n",[Name],Opts),
     ok = file:write_file(Name, Code),
-    erl_tidy:file(Name,[{paper, 95},{backups,false}]),
+    ok = erl_tidy:file(Name,[{paper, 95},{backups,false}]),
     {ok,Name}.
 
 compile_file(File, COpts, MyOpts) ->

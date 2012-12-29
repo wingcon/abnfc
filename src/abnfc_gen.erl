@@ -55,6 +55,7 @@ generate(AST, Opts) ->
     Verbose = proplists:get_bool(verbose,Opts),
     maybe_write("Opts ~p~n",[Opts],Verbose),
     Module = proplists:get_value(mod,Opts),
+    Prefix = proplists:get_value(prefix,Opts),
     Type = case proplists:get_bool(binary, Opts) of
                true -> binary;
                false -> list
@@ -64,14 +65,14 @@ generate(AST, Opts) ->
                    attribute(atom(module), [atom(Module)]),
                    gen_ifdef(include_gen(Module)),
                    exports_names(),
-                   exports(Names),
-                   gen_ifdef(exports_gen(Names)),
+                   exports(Prefix, Names),
+                   gen_ifdef(exports_gen(Prefix, Names)),
                    include(Module),
                    gen_names(Names),
-                   gen_dec(Names),
-                   gen_ifdef(gen_gen(Names)),
-                   form_list([form_list([gen_rule(R, Type, Verbose)]) || R <- AST]),
-                   gen_ifdef(form_list([form_list([gen_generator(R, Type, Verbose)]) || R <- AST])),
+                   gen_dec(Prefix, Names),
+                   gen_ifdef(gen_gen(Prefix, Names)),
+                   form_list([form_list([gen_rule(R, Type, Prefix, Verbose)]) || R <- AST]),
+                   gen_ifdef(form_list([form_list([gen_generator(R, Type, Prefix, Verbose)]) || R <- AST])),
                    mk__alt(),
                    mk__do_alt(),
                    mk__repeat(),
@@ -114,45 +115,48 @@ maybe_write(_Fmt,_Args,false) ->
 %% Internal functions - decode
 %%====================================================================
 
-exports(Funs) ->
+dec_atom(Prefix, A) ->
+    atom(list_to_atom(atom_to_list(Prefix)++atom_to_list(A))).
+
+exports(Prefix, Funs) ->
     attribute(atom(export),
               [list([arity_qualifier(atom(decode),integer(2))]++
-                        [arity_qualifier(atom(F),integer(0))||F<-Funs])]).
+                        [arity_qualifier(dec_atom(Prefix, F),integer(0))||F<-Funs])]).
 
 include(Module) ->
     attribute(atom(include),[string(lists:concat([Module,".hrl"]))]).
 
-gen_dec(Names) ->
+gen_dec(Prefix, Names) ->
     function(atom(decode),
              [clause([atom(Name),variable('Str')],[],
-                     [application(application(atom(Name),[]),[variable('Str')])])||Name<-Names]).
+                     [application(application(dec_atom(Prefix, Name),[]),[variable('Str')])])||Name<-Names]).
 
-gen_rule(#rule{name=Name, body=Element, code=nocode}, Type, Verbose) ->
-    maybe_write("abnfc_gen: generating rule ~p~n",[Name],Verbose),
-    Body = gen_elem(Element, Type),
-    mk_rule_fun(Name, Body);
+gen_rule(#rule{name=Name, body=Element, code=nocode}, Type, Prefix, Verbose) ->
+    maybe_write("abnfc_gen: generating rule ~p~p~n",[Prefix,Name],Verbose),
+    Body = gen_elem(Element, Type, Prefix),
+    mk_rule_fun(Prefix, Name, Body);
 
-gen_rule(#rule{name=Name, body=Element, code=Code}, Type, Verbose) ->
-    maybe_write("abnfc_gen: generating rule ~p~n",[Name],Verbose),
+gen_rule(#rule{name=Name, body=Element, code=Code}, Type, Prefix, Verbose) ->
+    maybe_write("abnfc_gen: generating rule ~p~p~n",[Prefix,Name],Verbose),
     Vars = gen_vars(Element),
-    Body = gen_elem(Element, Type),
-    mk_rule_fun(Name, Body, Vars, Code).
+    Body = gen_elem(Element, Type, Prefix),
+    mk_rule_fun(Prefix, Name, Body, Vars, Code).
 
-mk_rule_fun(Name, {tree, fun_expr, _, _}=Body) ->
+mk_rule_fun(Prefix, Name, {tree, fun_expr, _, _}=Body) ->
     function(
-      atom(Name),
+      dec_atom(Prefix, Name),
       [clause([],[],
               [Body])]);
 
-mk_rule_fun(Name, Body) ->
+mk_rule_fun(Prefix, Name, Body) ->
     function(
-      atom(Name),
+      dec_atom(Prefix, Name),
       [clause([],[],
               [Body])]).
 
-mk_rule_fun(Name, Body, Vars, Code) ->
+mk_rule_fun(Prefix, Name, Body, Vars, Code) ->
     function(
-      atom(Name),
+      dec_atom(Prefix, Name),
       [clause([],[],
               [fun_expr([clause([variable('T')],
                                 [],
@@ -204,22 +208,22 @@ is_safe(_, _Vars) ->
     false.
 
 
-gen_elem(#seq{elements=Elements}, Type) ->
-    Body = [gen_elem(Element, Type)||Element <- Elements],
+gen_elem(#seq{elements=Elements}, Type, Prefix) ->
+    Body = [gen_elem(Element, Type, Prefix)||Element <- Elements],
     application(atom('__seq'),[list(Body)]);
 
-gen_elem(#alt{alts=Elements}, Type) ->
-    Alts = [gen_elem(Element, Type)||Element <- Elements],
+gen_elem(#alt{alts=Elements}, Type, Prefix) ->
+    Alts = [gen_elem(Element, Type, Prefix)||Element <- Elements],
     application(atom('__alt'),[list(Alts)]);
 
-gen_elem(#repeat{min=Min, max=infinity, body=Elem}, Type) ->
+gen_elem(#repeat{min=Min, max=infinity, body=Elem}, Type, Prefix) ->
     application(atom('__repeat'),
-                [integer(Min), atom(infinity), gen_elem(Elem, Type)]);
-gen_elem(#repeat{min=Min, max=Max, body=Elem}, Type) ->
+                [integer(Min), atom(infinity), gen_elem(Elem, Type, Prefix)]);
+gen_elem(#repeat{min=Min, max=Max, body=Elem}, Type, Prefix) ->
     application(atom('__repeat'),
-                [integer(Min), integer(Max), gen_elem(Elem, Type)]);
+                [integer(Min), integer(Max), gen_elem(Elem, Type, Prefix)]);
 
-gen_elem(#char_val{value=Num}, Type) ->
+gen_elem(#char_val{value=Num}, Type, _Prefix) ->
     PList=mk_plist(Num,Type),
     fun_expr(
       [clause(PList,
@@ -228,7 +232,7 @@ gen_elem(#char_val{value=Num}, Type) ->
        clause([variable('_')], [], [atom(fail)])]);
 
 
-gen_elem(#char_range{from=From, to=To}, Type) ->
+gen_elem(#char_range{from=From, to=To}, Type, _Prefix) ->
     PList=mk_plist('C',Type),
     fun_expr(
       [clause(
@@ -237,13 +241,13 @@ gen_elem(#char_range{from=From, to=To}, Type) ->
          [tuple([atom(ok), variable('C'), variable('Tl')])]),
        clause([variable('_')], [], [atom(fail)])]);
 
-gen_elem(#char_alt{alts=Alts}, Type) ->
+gen_elem(#char_alt{alts=Alts}, Type, _Prefix) ->
     PList=mk_plist('C',Type),
     fun_expr([clause(PList,[char_guard(variable('C'),A)],
                      [tuple([atom(ok),variable('C'),variable('Tl')])])||A<-Alts]
              ++[clause([variable('_')],[],[atom(fail)])]);
 
-gen_elem(#char_seq{elements=Nums}, Type) ->
+gen_elem(#char_seq{elements=Nums}, Type, _Prefix) ->
     ParList = num_par_list(length(Nums), Type),
     Guard = num_guard(Nums),
     Result=[variable(list_to_atom(lists:concat(["C",N]))) || N <- lists:seq(1,length(Nums))],
@@ -251,8 +255,8 @@ gen_elem(#char_seq{elements=Nums}, Type) ->
                      [tuple([atom(ok), list(Result), variable('Tl')])]),
               clause([variable('_')],[],[atom(fail)])]);
 
-gen_elem(#rulename{name=Rule}, _Type) when is_atom(Rule) ->
-    application(atom(Rule),[]).
+gen_elem(#rulename{name=Rule}, _Type, Prefix) when is_atom(Rule) ->
+    application(dec_atom(Prefix, Rule),[]).
 
 mk_plist(Char, binary) when is_integer(Char) ->
     [binary([binary_field(integer(Char)),binary_field(variable('Tl'),[atom('binary')])])];
@@ -326,83 +330,83 @@ disjunction([As]) ->
 %% Internal functions - decode
 %%====================================================================
 
-exports_gen(Funs) ->
+exports_gen(Prefix, Funs) ->
     attribute(atom(export),
               [list([arity_qualifier(atom(generator),integer(1))]++
-                        [arity_qualifier(gen_atom(F),integer(0))||F<-Funs])]).
+                        [arity_qualifier(gen_atom(Prefix, F),integer(0))||F<-Funs])]).
 
 include_gen(_Module) ->
     attribute(atom(include_lib),[string("qc/include/qc.hrl")]).
 
-gen_gen(Names) ->
+gen_gen(Prefix, Names) ->
     function(atom(generator),
              [clause([atom(Name)],[],
-                     [application(gen_atom(Name),[])])||Name<-Names]).
+                     [application(gen_atom(Prefix, Name),[])])||Name<-Names]).
 
-gen_generator(#rule{name=Name, body=Element, code=_Code}, Type, Verbose) ->
-    maybe_write("abnfc_gen: generating generator ~p~n\t~p~n~n",[Name,Element],Verbose),
-    Body = gen_generator_elem(Element, Type),
-    mk_generator_fun(Name, Body).
+gen_generator(#rule{name=Name, body=Element, code=_Code}, Type, Prefix, Verbose) ->
+    maybe_write("abnfc_gen: generating generator ~p~p~n\t~p~n~n",[Prefix,Name,Element],Verbose),
+    Body = gen_generator_elem(Element, Type, Prefix),
+    mk_generator_fun(Prefix, Name, Body).
 
-mk_generator_fun(Name, {tree, fun_expr, _, _}=Body) ->
-    function(gen_atom(Name), [clause([],[], [Body])]);
+mk_generator_fun(Prefix, Name, {tree, fun_expr, _, _}=Body) ->
+    function(gen_atom(Prefix, Name), [clause([],[], [Body])]);
 
-mk_generator_fun(Name, Body) ->
-    function(gen_atom(Name), [clause([],[], [Body])]).
+mk_generator_fun(Prefix, Name, Body) ->
+    function(gen_atom(Prefix, Name), [clause([],[], [Body])]).
 
-gen_generator_elem(Element, Type) ->
+gen_generator_elem(Element, Type, Prefix) ->
     %% need unique counter :(
     gen_variable_start(),
-    Gen = gen_generator_elem1(Element, Type),
+    Gen = gen_generator_elem1(Element, Type, Prefix),
     gen_variable_stop(),
     Gen.
 
-gen_generator_elem1(Element, list) ->
-    X = gen_generator_elem2(Element, list),
+gen_generator_elem1(Element, list, Prefix) ->
+    X = gen_generator_elem2(Element, list, Prefix),
     gen_let(X);
-gen_generator_elem1(Element, binary) ->
-    X = gen_generator_elem2(Element, list),
+gen_generator_elem1(Element, binary, Prefix) ->
+    X = gen_generator_elem2(Element, list, Prefix),
     gen_let_binary(X).
 
-gen_generator_elem2(#seq{elements=Elements}, list) ->
-    Elts = [gen_generator_elem2(Element, list)||Element <- Elements],
+gen_generator_elem2(#seq{elements=Elements}, list, Prefix) ->
+    Elts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
     X = application(atom('__seq_generator'), [list(Elts)]),
     gen_let(X);
 
-gen_generator_elem2(#alt{alts=Elements}, list) ->
-    Alts = [gen_generator_elem2(Element, list)||Element <- Elements],
+gen_generator_elem2(#alt{alts=Elements}, list, Prefix) ->
+    Alts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
     X = application(atom(oneof), [list(Alts)]),
     gen_let(X);
 
-gen_generator_elem2(#repeat{min=Min, max=infinity, body=Elem}, list) ->
+gen_generator_elem2(#repeat{min=Min, max=infinity, body=Elem}, list, Prefix) ->
     X = application(atom('__repeat_generator'),
-                    [integer(Min), atom(infinity), gen_generator_elem2(Elem, list)]),
+                    [integer(Min), atom(infinity), gen_generator_elem2(Elem, list, Prefix)]),
     gen_let(X);
 
-gen_generator_elem2(#repeat{min=Min, max=Max, body=Elem}, list) ->
+gen_generator_elem2(#repeat{min=Min, max=Max, body=Elem}, list, Prefix) ->
     X = application(atom('__repeat_generator'),
-                    [integer(Min), integer(Max), gen_generator_elem2(Elem, list)]),
+                    [integer(Min), integer(Max), gen_generator_elem2(Elem, list, Prefix)]),
     gen_let(X);
 
-gen_generator_elem2(#char_val{value=Num}, list) ->
+gen_generator_elem2(#char_val{value=Num}, list, _Prefix) ->
     X = integer(Num),
     gen_let(X);
 
-gen_generator_elem2(#char_range{from=From, to=To}, list) ->
+gen_generator_elem2(#char_range{from=From, to=To}, list, _Prefix) ->
     X = application(atom(choose), [integer(From), integer(To)]),
     gen_let(X);
 
-gen_generator_elem2(#char_alt{alts=Elements}, list) ->
-    Alts = [gen_generator_elem2(Element, list)||Element <- Elements],
+gen_generator_elem2(#char_alt{alts=Elements}, list, Prefix) ->
+    Alts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
     X = application(atom(oneof), [list(Alts)]),
     gen_let(X);
 
-gen_generator_elem2(#char_seq{elements=Elements}, list) ->
-    Elts = [gen_generator_elem2(Element, list)||Element <- Elements],
+gen_generator_elem2(#char_seq{elements=Elements}, list, Prefix) ->
+    Elts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
     X = application(atom('__seq_generator'), [list(Elts)]),
     gen_let(X);
 
-gen_generator_elem2(#rulename{name=Generator}, _Type) when is_atom(Generator) ->
+gen_generator_elem2(#rulename{name=Generator}, _Type, Prefix) when is_atom(Generator) ->
     V = gen_variable(),
     macro(atom('SIZED'),
           [V, application(atom(resize),
@@ -412,7 +416,7 @@ gen_generator_elem2(#rulename{name=Generator}, _Type) when is_atom(Generator) ->
                                     clause([],
                                            atom(true),
                                            [integer(0)])]),
-                           application(gen_atom(Generator), [])])]).
+                           application(gen_atom(Prefix, Generator), [])])]).
 
 gen_let(X) ->
     V = gen_variable(),
@@ -422,8 +426,8 @@ gen_let_binary(X) ->
     V = gen_variable(),
     macro(atom('LET'), [V, X, application(atom(erlang), atom(list_to_binary), [list([V])])]).
 
-gen_atom(A) ->
-    atom(list_to_atom(atom_to_list(A)++"_generator")).
+gen_atom(Prefix, A) ->
+    atom(list_to_atom(atom_to_list(Prefix)++atom_to_list(A)++"_generator")).
 
 gen_ifdef(F) ->
     form_list([attribute(atom(ifdef),[atom('QC')]),
