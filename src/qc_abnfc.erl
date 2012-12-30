@@ -40,10 +40,10 @@ prop(Module, Type, Name) ->
 %%====================================================================
 
 prop(Module, list, Name, X) ->
-    X1 = if is_list(X) -> lists:flatten(X); is_number(X) -> [X] end,
+    X1 = if is_list(X) -> lists:flatten(X); is_integer(X) -> [X] end,
     case Module:decode(Name, X1) of
         {ok,Y,[]} ->
-            Y1 = if is_list(Y) -> Y; is_number(Y) -> Y end,
+            Y1 = if is_list(Y) -> Y; is_integer(Y) -> Y end,
             Res = X =:= Y1,
             Args = [?FILE, ?LINE, Name, X, Y],
             ?WHENFAIL(io:format("~n~p:~p ~p ~p -> ~p~n", Args), Res);
@@ -54,7 +54,7 @@ prop(Module, list, Name, X) ->
 prop(Module, binary, Name, X) ->
     case Module:decode(Name, X) of
         {ok,Y,<<>>} ->
-            Y1 = if is_list(Y) -> list_to_binary(Y); is_number(Y) -> list_to_binary([Y]) end,
+            Y1 = if is_list(Y) -> list_to_binary(Y); is_integer(Y) -> list_to_binary([Y]) end,
             Res = X =:= Y1,
             Args = [?FILE, ?LINE, Name, X, Y],
             ?WHENFAIL(io:format("~n~p:~p ~p ~p -> ~p~n", Args), Res);
