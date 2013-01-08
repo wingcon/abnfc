@@ -408,14 +408,20 @@ gen_generator_elem2(#char_seq{elements=Elements}, list, Prefix) ->
 
 gen_generator_elem2(#rulename{name=Generator}, _Type, Prefix) when is_atom(Generator) ->
     V = gen_variable(),
+    %% option #1
+    %% macro(atom('SIZED'),
+    %%       [V, application(atom(resize),
+    %%                       [if_expr([clause([],
+    %%                                        infix_expr(V,operator('>'),integer(0)),
+    %%                                        [infix_expr(V,operator('-'),integer(1))]),
+    %%                                 clause([],
+    %%                                        atom(true),
+    %%                                        [integer(0)])]),
+    %%                        application(gen_atom(Prefix, Generator), [])])]).
+    %% option #2
     macro(atom('SIZED'),
           [V, application(atom(resize),
-                          [if_expr([clause([],
-                                           infix_expr(V,operator('>'),integer(0)),
-                                           [infix_expr(V,operator('-'),integer(1))]),
-                                    clause([],
-                                           atom(true),
-                                           [integer(0)])]),
+                          [application(atom(erlang), atom(round), [application(atom(math), atom(sqrt), [V])]),
                            application(gen_atom(Prefix, Generator), [])])]).
 
 gen_let(X) ->
