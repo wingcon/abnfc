@@ -36,7 +36,7 @@ file(File) ->
 -spec file(filename(), options()) -> ok | {ok,module()} | {error,Rest::term()} | error.
 file(File, Opts) when is_list(Opts) ->
     {ok, Name, Text} = read_file(File),
-    POpts = [],
+    POpts = parse_opts(Opts),
     GenOpts = gen_opts(Name, Opts),
     COpts = compiler_opts(Opts),
     case parse(Text, POpts) of
@@ -70,7 +70,7 @@ parse(Bin, Opts) when is_binary(Bin) ->
     parse(binary_to_list(Bin), Opts);
 
 parse(String, Opts) when is_list(String) ->
-    Parser = proplists:get_value(parser, parse_opts(Opts)),
+    Parser = proplists:get_value(parser, Opts),
     Parser:decode(rulelist, String).
 
 %%--------------------------------------------------------------------
