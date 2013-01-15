@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @copyright 2009 Anders Nygren
 %%% @author Anders Nygren <anders.nygren@gmail.com>
+%%% @author Joseph Wayne Norton <norton@alum.mit.edu>
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
@@ -9,6 +10,7 @@
 %% API
 -export([file/1, file/2, parse/1, parse/2]).
 -export([erlangcode/0]).
+-export([erlangcode_generator/1]).
 
 %%====================================================================
 %% Types
@@ -42,13 +44,18 @@ file(File, Opts) when is_list(Opts) ->
     case parse(Text, POpts) of
         {ok, AST, []} ->
             AST1 = abnfc_ast:ast_to_int_form(AST),
-            case proplists:get_bool(verbose,Opts) of
-                true -> io:format("~p~n",[AST1]);
-                false -> ok
-            end,
-            {ok, Code} = abnfc_gen:generate(AST1, GenOpts),
-            {ok, GenFile} = write_file(Code, GenOpts ++ Opts),
-            compile_file(GenFile, COpts, Opts);
+            AST2 = abnfc_ast:int_to_dgh_form(AST1),
+            try
+                case proplists:get_bool(verbose,Opts) of
+                    true -> io:format("~p~n",[AST1]);
+                    false -> ok
+                end,
+                {ok, Code} = abnfc_gen:generate(AST1, AST2, GenOpts),
+                {ok, GenFile} = write_file(Code, GenOpts ++ Opts),
+                compile_file(GenFile, COpts, Opts)
+            after
+                abnfc_ast:delete_dgh_form(AST2)
+            end;
         {ok, _AST, Rest} ->
             {error, Rest}
     end.
@@ -80,6 +87,10 @@ parse(String, Opts) when is_list(String) ->
 -spec erlangcode() -> fun(('eof' | string()) -> {ok, Abs::term(), Extra::binary()}).
 erlangcode() ->
     fun (T) -> scan(T) end.
+
+-spec erlangcode_generator(non_neg_integer()) -> fun(('eof' | string()) -> {ok, Abs::term(), Extra::binary()}).
+erlangcode_generator(_Depth) ->
+    erlangcode().
 
 scan(Input) ->
     case erl_scan:tokens([], Input, 1) of
@@ -113,12 +124,13 @@ parse_opts(Opts) ->
 gen_opts(Name, Opts) ->
     Mod = proplists:get_value(mod, Opts, Name),
     Prefix = proplists:get_value(prefix, Opts, ''),
+    QC = proplists:get_value(qc, Opts, []),
     Type = case proplists:get_bool(binary, Opts) of
                true -> binary;
                false -> list
            end,
     Verbose = proplists:get_bool(verbose,Opts),
-    [{mod,Mod},{prefix,Prefix},{verbose,Verbose},Type].
+    [{mod,Mod},{prefix,Prefix},{qc,QC},{verbose,Verbose},Type].
 
 compiler_opts(Opts) ->
     OutDir = proplists:get_value(o, Opts, "./"),

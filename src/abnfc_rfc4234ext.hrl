@@ -11,16 +11,16 @@
 
 -ifdef('QC').
 
--import(abnfc,[erlangcode_generator/0]).
--import(rfc4234ext_core, ['ALPHA_generator'/0,
-                          'DIGIT_generator'/0,
-                          'WSP_generator'/0,
-                          'CRLF_generator'/0,
-                          'VCHAR_generator'/0,
-                          'DQUOTE_generator'/0,
-                          'SQUOTE_generator'/0,
-                          'BIT_generator'/0,
-                          'HEXDIG_generator'/0]).
+-import(abnfc,[erlangcode_generator/1]).
+-import(rfc4234ext_core, ['ALPHA_generator'/1,
+                          'DIGIT_generator'/1,
+                          'WSP_generator'/1,
+                          'CRLF_generator'/1,
+                          'VCHAR_generator'/1,
+                          'DQUOTE_generator'/1,
+                          'SQUOTE_generator'/1,
+                          'BIT_generator'/1,
+                          'HEXDIG_generator'/1]).
 
 -endif.
 

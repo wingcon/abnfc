@@ -1,13 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @copyright 2009 Anders Nygren
 %%% @author Anders Nygren <anders.nygren@gmail.com>
+%%% @author Joseph Wayne Norton <norton@alum.mit.edu>
 %%% @doc Code generation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(abnfc_gen).
 
 %% API
--export([generate/2]).
+-export([generate/3]).
 
 -compile(export_all).
 
@@ -51,16 +52,30 @@
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-generate(AST, Opts) ->
+generate(AST1, AST2, Opts) ->
     Verbose = proplists:get_bool(verbose,Opts),
     maybe_write("Opts ~p~n",[Opts],Verbose),
     Module = proplists:get_value(mod,Opts),
     Prefix = proplists:get_value(prefix,Opts),
+    QC0 = proplists:get_value(qc,Opts,[]),
+    QC = case proplists:get_value(sized_recursion_limit,QC0,10) of
+             undefined ->
+                 %% disabled
+                 [{sized_recursion_limit,undefined}];
+             Depth when is_integer(Depth) ->
+                 %% automatically calculate terminals
+                 Vertices = digraph:vertices(AST2),
+                 SCCs = lists:append(digraph_utils:cyclic_strong_components(AST2)),
+                 [{sized_recursion_limit,{Depth,Vertices -- SCCs}}];
+             {Depth,Terminals} when is_integer(Depth), is_list(Terminals) ->
+                 %% manually specify terminals
+                 [{sized_recursion_limit,{Depth,Terminals}}]
+         end,
     Type = case proplists:get_bool(binary, Opts) of
                true -> binary;
                false -> list
            end,
-    Names = [R#rule.name||R<-AST],
+    Names = [R#rule.name||R<-AST1],
     Res=form_list([header_comments(),
                    attribute(atom(module), [atom(Module)]),
                    gen_ifdef(include_gen(Module)),
@@ -71,8 +86,8 @@ generate(AST, Opts) ->
                    gen_names(Names),
                    gen_dec(Prefix, Names),
                    gen_ifdef(gen_gen(Prefix, Names)),
-                   form_list([form_list([gen_rule(R, Type, Prefix, Verbose)]) || R <- AST]),
-                   gen_ifdef(form_list([form_list([gen_generator(R, Type, Prefix, Verbose)]) || R <- AST])),
+                   form_list([form_list([gen_rule(R, Type, Prefix, Verbose)]) || R <- AST1]),
+                   gen_ifdef(form_list([form_list([gen_generator(AST2, R, Type, Prefix, Verbose, QC)]) || R <- gen_edges(AST2)])),
                    mk__alt(),
                    mk__do_alt(),
                    mk__repeat(),
@@ -81,6 +96,7 @@ generate(AST, Opts) ->
                    gen_ifdef(mk__repeat_generator()),
                    gen_ifdef(mk__seq_generator()),
                    gen_ifdef(mk__do_seq_generator()),
+                   gen_ifdef(mk__terminals_oneof_generator()),
                    eof_marker()]),
     {ok, erl_prettypr:format(Res)}.
 
@@ -333,7 +349,7 @@ disjunction([As]) ->
 exports_gen(Prefix, Funs) ->
     attribute(atom(export),
               [list([arity_qualifier(atom(generator),integer(1))]++
-                        [arity_qualifier(gen_atom(Prefix, F),integer(0))||F<-Funs])]).
+                        [arity_qualifier(gen_atom(Prefix, F),integer(1))||F<-Funs])]).
 
 include_gen(_Module) ->
     attribute(atom(include_lib),[string("qc/include/qc.hrl")]).
@@ -341,88 +357,104 @@ include_gen(_Module) ->
 gen_gen(Prefix, Names) ->
     function(atom(generator),
              [clause([atom(Name)],[],
-                     [application(gen_atom(Prefix, Name),[])])||Name<-Names]).
+                     [application(gen_atom(Prefix, Name),[integer(0)])])||Name<-Names]).
 
-gen_generator(#rule{name=Name, body=Element, code=_Code}, Type, Prefix, Verbose) ->
+gen_edge(G, F) ->
+    [E] = gen_edges(G, F),
+    E.
+
+gen_edges(G) ->
+    gen_edges(G, []).
+
+gen_edges(G, F) ->
+    lists:keysort(3, [ digraph:edge(G, E) || E <- digraph:out_edges(G, F) ]).
+
+gen_generator(G, {_,_,Name,#rule{body=Element}}, Type, Prefix, Verbose, QC) ->
     maybe_write("abnfc_gen: generating generator ~p~p~n\t~p~n~n",[Prefix,Name,Element],Verbose),
-    Body = gen_generator_elem(Element, Type, Prefix),
+    Body = gen_generator_elem(G, gen_edge(G, Name), Type, Prefix, QC),
     mk_generator_fun(Prefix, Name, Body).
 
 mk_generator_fun(Prefix, Name, {tree, fun_expr, _, _}=Body) ->
-    function(gen_atom(Prefix, Name), [clause([],[], [Body])]);
+    Depth = infix_expr(variable('Depth'),operator('>='),integer(0)),
+    function(gen_atom(Prefix, Name), [clause([variable('Depth')], [Depth], [Body])]);
 
 mk_generator_fun(Prefix, Name, Body) ->
-    function(gen_atom(Prefix, Name), [clause([],[], [Body])]).
+    Depth = infix_expr(variable('Depth'),operator('>='),integer(0)),
+    function(gen_atom(Prefix, Name), [clause([variable('Depth')], [Depth], [Body])]).
 
-gen_generator_elem(Element, Type, Prefix) ->
+gen_generator_elem(G, Element, Type, Prefix, QC) ->
     %% need unique counter :(
     gen_variable_start(),
-    Gen = gen_generator_elem1(Element, Type, Prefix),
-    gen_variable_stop(),
-    Gen.
+    try
+        gen_generator_elem1(G, Element, Type, Prefix, QC)
+    after
+        gen_variable_stop()
+    end.
 
-gen_generator_elem1(Element, list, Prefix) ->
-    X = gen_generator_elem2(Element, list, Prefix),
+gen_generator_elem1(G, Element, list, Prefix, QC) ->
+    X = gen_generator_elem2(G, Element, list, Prefix, QC),
     gen_let(X);
-gen_generator_elem1(Element, binary, Prefix) ->
-    X = gen_generator_elem2(Element, list, Prefix),
+gen_generator_elem1(G, Element, binary, Prefix, QC) ->
+    X = gen_generator_elem2(G, Element, list, Prefix, QC),
     gen_let_binary(X).
 
-gen_generator_elem2(#seq{elements=Elements}, list, Prefix) ->
-    Elts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
+gen_generator_elem2(G, {_,_,T,#seq{}}, list, Prefix, QC) ->
+    Elts = [gen_generator_elem2(G, Element, list, Prefix, QC)||Element <- gen_edges(G, T)],
     X = application(atom('__seq_generator'), [list(Elts)]),
     gen_let(X);
 
-gen_generator_elem2(#alt{alts=Elements}, list, Prefix) ->
-    Alts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
-    X = application(atom(oneof), [list(Alts)]),
-    gen_let(X);
+gen_generator_elem2(G, {_,_,T,#alt{}}, list, Prefix, QC) ->
+    Es = gen_edges(G, T),
+    Alts = [gen_generator_elem2(G, Alt, list, Prefix, QC)||Alt <- Es],
+    case proplists:get_value(sized_recursion_limit, QC) of
+        undefined ->
+            X = application(atom(oneof), [list(Alts)]),
+            gen_let(X);
+        {Limit, Terminals} ->
+            AltsT = [gen_generator_elem2(G, Alt, list, Prefix, QC)||{_,_,V,_}=Alt <- Es, lists:member(V,Terminals)],
+            X = if AltsT == [] ->
+                        application(atom(oneof), [list(Alts)]);
+                   true ->
+                        application(atom('__terminals_oneof_generator'), [variable('Depth'), integer(Limit), list(AltsT), list(Alts)])
+                end,
+            gen_let(X)
+    end;
 
-gen_generator_elem2(#repeat{min=Min, max=infinity, body=Elem}, list, Prefix) ->
+gen_generator_elem2(G, {_,_,T,#repeat{min=Min, max=infinity}}, list, Prefix, QC) ->
     X = application(atom('__repeat_generator'),
-                    [integer(Min), atom(infinity), gen_generator_elem2(Elem, list, Prefix)]),
+                    [integer(Min), atom(infinity), gen_generator_elem2(G, gen_edge(G, T), list, Prefix, QC)]),
     gen_let(X);
 
-gen_generator_elem2(#repeat{min=Min, max=Max, body=Elem}, list, Prefix) ->
+gen_generator_elem2(G, {_,_,T,#repeat{min=Min, max=Max}}, list, Prefix, QC) ->
     X = application(atom('__repeat_generator'),
-                    [integer(Min), integer(Max), gen_generator_elem2(Elem, list, Prefix)]),
+                    [integer(Min), integer(Max), gen_generator_elem2(G, gen_edge(G, T), list, Prefix, QC)]),
     gen_let(X);
 
-gen_generator_elem2(#char_val{value=Num}, list, _Prefix) ->
+gen_generator_elem2(_G, {_,_,_T,#char_val{value=Num}}, list, _Prefix, _QC) ->
     X = integer(Num),
     gen_let(X);
 
-gen_generator_elem2(#char_range{from=From, to=To}, list, _Prefix) ->
+gen_generator_elem2(_G, {_,_,_T,#char_range{from=From, to=To}}, list, _Prefix, _QC) ->
     X = application(atom(choose), [integer(From), integer(To)]),
     gen_let(X);
 
-gen_generator_elem2(#char_alt{alts=Elements}, list, Prefix) ->
-    Alts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
+gen_generator_elem2(G, {E,F,T,#char_alt{alts=Elements}}, list, Prefix, QC) ->
+    Alts = [gen_generator_elem2(G, {E,F,T,Element}, list, Prefix, QC)||Element <- Elements],
     X = application(atom(oneof), [list(Alts)]),
     gen_let(X);
 
-gen_generator_elem2(#char_seq{elements=Elements}, list, Prefix) ->
-    Elts = [gen_generator_elem2(Element, list, Prefix)||Element <- Elements],
+gen_generator_elem2(G, {E,F,T,#char_seq{elements=Elements}}, list, Prefix, QC) ->
+    Elts = [gen_generator_elem2(G, {E,F,T,Element}, list, Prefix, QC)||Element <- Elements],
     X = application(atom('__seq_generator'), [list(Elts)]),
     gen_let(X);
 
-gen_generator_elem2(#rulename{name=Generator}, _Type, Prefix) when is_atom(Generator) ->
+gen_generator_elem2(_, {_,_,_,#rulename{name=Name}}, _Type, Prefix, _QC) when is_atom(Name) ->
     V = gen_variable(),
-    %% option #1
-    %% macro(atom('SIZED'),
-    %%       [V, application(atom(resize),
-    %%                       [if_expr([clause([],
-    %%                                        infix_expr(V,operator('>'),integer(0)),
-    %%                                        [infix_expr(V,operator('-'),integer(1))]),
-    %%                                 clause([],
-    %%                                        atom(true),
-    %%                                        [integer(0)])]),
-    %%                        application(gen_atom(Prefix, Generator), [])])]).
-    %% option #2
+    Depth = infix_expr(variable('Depth'),operator('+'),integer(1)),
     macro(atom('SIZED'),
           [V, application(atom(resize),
                           [application(atom(erlang), atom(round), [application(atom(math), atom(sqrt), [V])]),
-                           application(gen_atom(Prefix, Generator), [])])]).
+                           application(gen_atom(Prefix, Name), [Depth])])]).
 
 gen_let(X) ->
     V = gen_variable(),
@@ -670,3 +702,20 @@ mk__do_seq_generator() ->
                        [variable('K'),
                         variable('H'),
                         application(atom('__do_seq_generator'),[variable('T'),cons(variable('K'),variable('Acc'))])])])]).
+
+mk__terminals_oneof_generator() ->
+    function(atom('__terminals_oneof_generator'),
+             [clause(
+                [variable('Depth'),variable('Limit'),variable('AltsT'),variable('Alts')],
+                [],
+                [macro(atom('SIZED'),
+                       [variable('Size'),
+                        macro(atom('LET'),
+                              [variable('Choose'),application(atom('choose'),[integer(0),variable('Limit')]),
+                               case_expr(variable('Depth'),
+                                         [clause([variable('Depth')],
+                                                 [infix_expr(variable('Depth'),operator('>='),infix_expr(variable('Size'),operator('+'),variable('Choose')))],
+                                                 [application(atom('oneof'),[variable('AltsT')])]),
+                                          clause([variable('_')],
+                                                 [],
+                                                 [application(atom('oneof'),[variable('Alts')])])])])])])]).
