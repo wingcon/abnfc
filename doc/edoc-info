@@ -1,3 +1,4 @@
+%% encoding: UTF-8
 {application,abnfc}.
 {packages,[]}.
 {modules,[abnfc,abnfc_ast,abnfc_gen,abnfc_rfc4234,abnfc_rfc4234ext,
