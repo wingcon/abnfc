@@ -1,7 +1,6 @@
 
 
-#Module abnfc_ast#
-
+# Module abnfc_ast #
 
 Copyright (c) 2009 Anders Nygren
 
