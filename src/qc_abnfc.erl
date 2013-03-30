@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright 2012 Joseph Wayne Norton
+%%% @copyright 2012-2013 Joseph Wayne Norton
 %%% @author Joseph Wayne Norton <norton@alum.mit.edu>
 %%% @doc
 %%% @end
